@@ -18,8 +18,8 @@ export default async function handler(req, res) {
   if (!geminiKey) return res.status(500).json({ error: 'Server config error' });
 
   try {
-    const summary = await askGemini(geminiKey, keyword);
-    return res.json({ summary, count: 1 });
+    const result = await askGemini(geminiKey, keyword);
+    return res.json(result);
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -30,13 +30,19 @@ async function askGemini(apiKey, keyword) {
 
 사용자가 "${keyword}"에 대해 질문했습니다.
 
-다음 규칙을 따라 답변해 주세요:
-- 노션에서 "${keyword}"을(를) 활용하는 방법을 구체적이고 실용적으로 설명
-- 단계별 방법이 있다면 번호를 매겨 설명
-- 관련 단축키가 있다면 포함 (Mac/Windows 모두)
+반드시 아래 JSON 형식으로만 답변하세요. 다른 텍스트 없이 JSON만 출력하세요:
+
+{
+  "summary": "핵심 요약 설명 (200자 이내, 간결하게)",
+  "steps": "구체적인 사용 방법이나 만드는 과정 (단계별로 번호 매겨서, 300자 이내)",
+  "shortcuts": "관련 단축키 목록 (Mac: Cmd+X / Windows: Ctrl+X 형식, 없으면 빈 문자열)"
+}
+
+규칙:
 - 한국어로 답변
-- 500자 이내로 간결하게
-- 마크다운 없이 일반 텍스트로`;
+- 마크다운 없이 일반 텍스트
+- shortcuts가 없으면 빈 문자열 ""
+- steps는 항상 포함`;
 
   const resp = await fetch(
     `${GEMINI_API}/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -45,7 +51,7 @@ async function askGemini(apiKey, keyword) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 1024 }
+        generationConfig: { temperature: 0.3, maxOutputTokens: 1024, responseMimeType: 'application/json' }
       })
     }
   );
@@ -56,5 +62,13 @@ async function askGemini(apiKey, keyword) {
   }
 
   const data = await resp.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'AI 응답을 생성하지 못했습니다.';
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!text) throw new Error('AI 응답을 생성하지 못했습니다.');
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { summary: text, steps: '', shortcuts: '' };
+  }
 }
