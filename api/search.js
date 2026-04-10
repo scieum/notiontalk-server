@@ -82,13 +82,13 @@ async function getCollectionId(pageId) {
   if (!resp.ok) throw new Error('Notion 페이지 로드 실패');
 
   const data = await resp.json();
-  for (const block of Object.values(data.recordMap?.block || {})) {
-    if (block.value?.type === 'collection_view_page' || block.value?.type === 'collection_view') {
-      if (block.value.collection_id) {
-        cachedCollectionId = block.value.collection_id;
-        return cachedCollectionId;
-      }
-    }
+
+  // recordMap.collection에서 직접 가져오기
+  const collections = data.recordMap?.collection || {};
+  const collectionIds = Object.keys(collections);
+  if (collectionIds.length > 0) {
+    cachedCollectionId = collectionIds[0];
+    return cachedCollectionId;
   }
   throw new Error('Collection ID를 찾을 수 없습니다');
 }
